@@ -1,8 +1,12 @@
 # Post-Ischemic-Stroke-Rehab--Whack-a-TA
+
+
 Introduction:
 Hello, welcome to our BE3100 EMG project slide cast! We are Group 12. Our group members are Majd
 Ayyad, Shriya Boyapati, McKenzie Davis, and Sophie Gu. Today we will be talking about our final
 project: Whack A TA, a physical-rehabilitation focused, interactive game.
+
+
 Objectives:
 The objective of this project is guided by the physiological mechanism of ischemic stroke, which
 generally occurs when a blood clot blocks or plugs an artery leading to the brain. Ischemic stroke often
@@ -11,6 +15,7 @@ Leveraging this pathophysiology, we developed the concept for our final project:
 game that allows users to rehabilitate from stroke using isometric exercise. In this game, users are tasked
 with flexing their muscles in order to “hit” the TAs incorporated in the project.
 Design Overview:
+
 The game itself is split into 4 main components. Firstly, the device is calibrated, allowing a EMG signal
 threshold to be determined for each user. The threshold is stored and utilized in order to determine
 whether a user was successful in meeting the requirements of the game. In particular, a user may be
@@ -20,6 +25,7 @@ earned for each hit. When the user completes 3 successful flexes, the game is co
 wins. The game parameters are easily adjustable, allowing physical therapists and healthcare providers to
 alter the task difficulty required to hit a “TA,” or the number of successful flexes required to complete the
 game, depending on a patients’ stage of recovery.
+
 EMG Signal:
 In order to obtain usable EMG data, the raw EMG required both physical and digital filtering. First, the
 EMG signal was passed through various hardware elements, including high pass and bandpass filters,
@@ -32,6 +38,8 @@ percentage choice was made to account for the viability of the strength of flexi
 hard while being distracted by the game). We would like to note that the data was collected in points
 rather than seconds. Essentially, we programmed the Arduino to output data at a rate of 1000 Hz (or
 roughly .05 points per seconds).
+
+
 Design:
 This is a picture of the CAD enclosure for the game, designed to fit the springs required for the TA figures
 (1). These are the different screens in our GUI. The first screen is the Whack A Ta starting screen. Once
@@ -45,6 +53,7 @@ seconds and clicks begin game. Here, we see the user is prompted to flex 6 secon
 After successfully doing so, the point counter increases to 1, and the servo motor moves to hit the TA.
 Then the user is prompted to flex 3 seconds to hit the other TA and once more for 6 seconds, ultimately
 leading to the victory screen. (1)
+
 Our results were validated via meticulous testing of the game design. 10 users were required to play the
 game as expected 3x each. These were considered “true” positive trials. They were also tasked with not
 flexing at all during the duration of the game 1x each. These were considered no flex trials. More
@@ -58,6 +67,8 @@ succeeded 100% of the time, indicating that the calibration process successfully
 thresholds per user and a false positive rate of 0%. (3)
 (22 seconds) This video shows a “no flex” trial, where the user did not flex when prompted to do so and
 the point value remained the same and the motor did not move as expected.
+
+
 Discussion:
 Overall, the game was relatively consistent in its performance across trials. In order to better the user
 experience, we aim to test methods to increase bluetooth connection reliability and coordinate
@@ -67,6 +78,7 @@ In terms of major challenges, we struggled with servo motor jitter. Although we 
 libraries and code AND reset the raspberry pi SD card, we were unable to reduce the jitter. We hope to
 address the issue in the future by looking into additional libraries and motors that can handle the tasks in
 the algorithm.
+
 Conclusion:
 Equipped with the learnings from this design process, we hope to produce more refined iterations by
 adding additional “moles” or motors to increase game complexity, adjusting the GUI to reflect different

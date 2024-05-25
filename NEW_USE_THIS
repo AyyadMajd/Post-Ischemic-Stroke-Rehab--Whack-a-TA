@@ -1,0 +1,306 @@
+import sys
+import asyncio
+from PyQt5.QtWidgets import QWidget, QApplication, QMainWindow
+from PyQt5 import uic
+import numpy as np
+from bleak import BleakScanner, BleakClient
+from bleak.backends.characteristic import BleakGATTCharacteristic
+import random 
+from PyQt5 import uic, QtWidgets
+
+from gpiozero import AngularServo
+from time import sleep
+import qasync
+#from gpiozero.pins.pigpio import PiGPIOFactory
+#myFactory = PiGPIOFactory()
+#from gpiozero import servo
+# defien servo : pin = 17 , 
+servo_one = AngularServo(17, min_angle = -90 , max_angle = 90)
+servo_one.angle = 0
+ #BLE peripheral ID
+ADDRESS = "8C:AA:B5:8A:22:86"#"7D60F688-123E-30F8-9968-C0DF363EBE0C"#"8C:AA:B5:8A:22:86"# #McKenzie Mac 8967D0A1-7A68-1C23-6A0C-765214E4EAA6 EDIT THIS VARIABLE | Testing on MAC 8967D0A1-7A68-1C23-6A0C-765214E4EAA6 | ma A3B102E8-F212-61B2-4E21-52A9527812AF
+
+'''DO NOT EDIT ANYTHING BELOW THIS for Part 1'''
+UART_CHAR_UUID = "5212ddd0-29e5-11eb-adc1-0242ac120002"
+startFile = "startscreen_try6.ui"
+calibrationFile = "calibration_apr30.ui"
+gameFile = "mainscreen.ui"
+
+class calibrationWindow(QWidget):
+    def __init__(self,parent=None):  
+        super().__init__(parent)
+
+        # initial variables
+        self._client = None
+        self._storedData = []
+        self._device = None
+        self._moving_average = [] # moving average total data
+        self._max_amplitude = float('-inf')  # Initialize to negative infinity
+        self._values = []
+        self.isCalibrated = False 
+        self.IwtCalibrate = False 
+        self.IwtStart = False #note this should go to game
+        self.threshold = 0 
+        self.first_condition_values = []# might have an issue w overwriting
+        self.second_condition_values = []
+        self.ask = 0
+        self.successful_reps= 0 
+        self.Imbusy = False
+        self.numWin = 3
+        self.count = 0
+        self._buffer = []
+        self.val_averages = []
+        self.mean_avg = [] # ask patterson 
+        self.mean_value= 0 
+        servo_one.angle = 0
+        self.buffer_final = []
+        # GUI Set up
+        self.resize(640, 480)
+        self.init_UI()
+    
+    def init_UI(self):
+        # establish main UI
+        uic.loadUi(calibrationFile, self)
+      
+        # setup up plot
+        plot = self.graphicsView.addPlot(title="My Data")
+        self._curve = plot.plot(self._storedData)
+
+        #connect push buttons
+        self.connectButton.clicked.connect(self.handle_connect)
+        self.stopButton.clicked.connect(self.handle_stop)
+        self.pushButton.clicked.connect(self.handle_callibration)
+        self.beginButton.clicked.connect(self.handle_begin)
+        print("functions")
+     
+    #@qasync.asyncSlot()
+    def handle_begin(self, checked):
+      #stop the window
+      # self.w = gameWindow(self.threshold)
+      # self.w.show()
+      # self.handle_stop
+      self.IwtStart = True
+      self.instructionsLabel.setText("START WHACKING TAs! See instructions below.")
+      self.label.setText("Game has started. See above for instructions!")
+      self.scoreLabel.setText("SCORE: 0")
+
+    @property
+    def device(self):
+        return self._device
+
+    @property
+    def client(self):
+        return self._client
+
+    async def build_client(self, device):
+        if self._client is not None:
+            await self._client.stop()
+        self._client = BleakClient(self._device)
+        await self.start()
+
+    @qasync.asyncSlot()
+    async def handle_connect(self):
+        print("connect")
+        self.label.setText("scanning for device...")
+        await self.handle_scan()
+        self.label.setText("Connecting to device...")
+        await self.build_client(self._device)
+        self.label.setText("Connected. Press Calibrate") 
+        await self.client.start_notify(UART_CHAR_UUID, self.notification_handler)
+    
+ 
+    @qasync.asyncSlot()
+    async def handle_scan(self):
+        self._device = await BleakScanner.find_device_by_address(ADDRESS)
+        self.label.setText("Found device")
+    
+    @qasync.asyncSlot()
+    async def start(self):
+        await self.client.connect()
+    
+
+    @qasync.asyncSlot()
+    async def handle_stop(self):
+        await self.client.stop_notify(UART_CHAR_UUID)
+        await self.client.disconnect()
+        self._client = None
+        self.label.setText('Device was disconnected.')
+    
+    #calibration 
+    @qasync.asyncSlot()
+    async def handle_callibration(self):
+        self.label.setText("Calibrating...")
+        self.IwtCalibrate = True
+
+    @property
+    def storedData(self):
+        return self._storedData
+
+    @property
+    def curve(self):
+        return self._curve
+
+    def notification_handler(self,characteristic: BleakGATTCharacteristic, data: bytearray):
+        """Simple notification handler which prints the data received."""
+        convertData = list(data)
+        # set a moving window variable
+        mean_value_reading = self.perform_averge_filter(convertData)#np.mean(convertData)
+        self.update_plot(mean_value_reading)
+       
+        if not self.isCalibrated and self.IwtCalibrate: 
+            # self.perform_one_calibration(mean_value)
+            self.perform_calibration(mean_value_reading)  
+        if self.isCalibrated and self.IwtStart:
+            self.perform_game(mean_value_reading)
+           
+    
+         
+   
+    def perform_averge_filter(self, vals): 
+        #input is the convert data then sppend it then add teh mean for 100 points 
+        #vals will be teh convert data
+        # check 
+        vals = [vals]
+        self.mean_avg.extend(vals)
+        if len(self.mean_avg) == 2:
+            self.mean_value = np.mean(self.mean_avg)
+            self.mean_avg =[]
+        return self.mean_value
+
+
+    def perform_calibration(self, vals):
+        """Update the maximum amplitude observed."""
+        vals = [vals]
+        self._values.extend(vals)
+        average_max = 0 
+        self.label.setText('FLEX AS HARD AS YOU CAN FOR 4 SECONDS!')
+        if len(self._values) == 150:
+            max_values = []
+            for i in range(0, 150, 50):
+                window = self._values[i:i+50]
+                max_values.append(max(window))
+            average_max = sum(max_values) / len(max_values)
+            self.threshold = 0.5 * average_max
+            self.isCalibrated = True
+            self.label.setText('STOP FLEXING')
+            self.IwtCalibrate = False
+            print(self.threshold)
+            self.label.setText("Calibrated - press BEGIN GAME to start the game")
+        return self.threshold 
+    
+    def perform_game(self, vals):
+      #print("game")
+      #print(self.ask)
+      if self.Imbusy == False:
+        self._buffer.extend([vals])
+        self.whichTALabel.setText("Pausing...wait for more instructions.")
+        if len(self._buffer) == 70:
+          self.ask = random.randint(1,2) # 1 or 2 jude or taewhan
+          self.Imbusy = True
+          self._buffer = []
+          print('inside loop')
+          servo_one.angle = 0
+      if self.ask == 1:
+          self.perform_task_one(vals)
+      if self.ask == 2:
+        self.perform_task_two(vals)
+      if self.successful_reps == self.numWin:       
+        self.instructionsLabel.setText("YOU WIN!!")
+        self.whichTALabel.setText("Congratulations!")
+        self.buffer_final.extend([vals])
+        if len(self.buffer_final) == 30:
+            servo_one.angle = 0
+            self.handle_stop()
+    
+    def update_plot(self, vals):
+        self._moving_average.append(vals)
+        #plotData= np.ravel(self._moving_average)
+        self.curve.setData(self._moving_average)
+    
+    def perform_task_one(self, vals):   # ask if that's fine
+      self.whichTALabel.setText("HIT JUDE - flex for 3 seconds starting now!") # check later
+      #collect 3000 points and check tif they are above the threshold 
+      self.first_condition_values.extend([vals])
+      if len(self.first_condition_values) == 60: #3 seconds
+        print("working")
+        ratio =  self.sucess_ratio(self.first_condition_values)
+        if ratio >= 0.6:
+          servo_one.angle = 90
+          self.successful_reps = self.successful_reps + 1 # display on gui
+          self.scoreLabel.setText("SCORE: " + str(self.successful_reps))
+        self.val_averages =[]
+        self.Imbusy = False
+        self.first_condition_values = []
+        print(str(self.successful_reps))
+        self.ask = 0
+    
+    def perform_task_two(self, vals):   # ask if that's fine 
+      self.whichTALabel.setText("HIT TAEHWAN - flex for 6 seconds starting now!") # check later
+      #await asyncio.sleep(5)
+      #collect 6000 points and check if they are above the threshold 
+      self.second_condition_values.extend([vals])
+      if len(self.second_condition_values) == 120: #6 seconds
+        print("working")
+        ratio =  self.sucess_ratio(self.second_condition_values)
+        if ratio >= 0.6:
+          servo_one.angle = -90
+          self.successful_reps = self.successful_reps + 1 # display on gui
+          self.scoreLabel.setText("SCORE:" + str(self.successful_reps))
+          
+        self.val_averages = []
+        self.Imbusy = False
+        self.second_condition_values = []
+        print(str(self.successful_reps))
+        self.ask = 0
+    # def closeEvent(self, event):
+    #     super().closeEvent(event)
+    #     for task in asyncio.all_tasks():
+    #         task.cancel()
+    #add the moving avg here: take every 3 oint avg tehm tehn compare
+    def sucess_ratio(self, vals): 
+      #vals = [vals]
+             #self.val_averages = [] # make sure to add this before and after calculting the ratio!!!!!! @@@ super imp 
+        for i in range(0, len(vals), 3):
+        # Slice the next three elements
+            subset = vals[i:i+3]
+            subset_average = sum(subset) / len(subset)
+            self.val_averages.append(subset_average)
+        for val_average in self.val_averages:
+            if val_average >= self.threshold:
+                self.count = self.count +1 
+        ratio = self.count/ len(self.val_averages)
+        self.count = 0 
+        self.val_averages = []
+        return ratio 
+
+class startScreen(QMainWindow):
+    """
+    This "window" is a QWidget. If it has no parent, it
+    will appear as a free-floating window as we want.
+    """
+    def __init__(self):
+      super().__init__()
+      uic.loadUi(startFile, self)
+      self.startButton.clicked.connect(self.handle_start)  
+    def handle_start(self, checked):
+      self.w = calibrationWindow()
+      self.w.show()
+
+      
+def main(args):
+    app = QtWidgets.QApplication(sys.argv)
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+    a = startScreen()
+    a.show()
+    with loop:
+        loop.run_forever()
+
+
+if __name__ == "__main__":
+    main(sys.argv)
+    # await main(sys.argv)  # for jupyter notebooks
+# app = QApplication(sys.argv)
+# w = startScreen()
+# w.show()
+# app.exec()
